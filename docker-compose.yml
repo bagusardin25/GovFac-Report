@@ -1,0 +1,15 @@
+# Port 5434 so it doesn't clash with a locally installed Postgres.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: govfac
+      POSTGRES_PASSWORD: govfac
+      POSTGRES_DB: govfac
+    ports:
+      - "5434:5432"
+    volumes:
+      - govfac-db:/var/lib/postgresql/data
+
+volumes:
+  govfac-db:
