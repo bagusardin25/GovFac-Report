@@ -26,10 +26,43 @@ func (f *fakeRepository) Create(_ context.Context, r *Report) error {
 	f.nextID++
 	r.ID = f.nextID
 	r.Status = StatusAdminReview
-	r.CreatedAt = time.Now()
+	// Spread creation times out so ordering by newest is deterministic.
+	r.CreatedAt = time.Now().Add(time.Duration(f.nextID) * time.Second)
+	r.UpdatedAt = r.CreatedAt
 	stored := *r
+	stored.Timeline = []StatusChange{{Status: r.Status, At: r.CreatedAt}}
 	f.reports = append(f.reports, &stored)
 	return nil
+}
+
+func (f *fakeRepository) ListByUser(_ context.Context, userID int64, limit, offset int) ([]*Report, int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var mine []*Report
+	for i := len(f.reports) - 1; i >= 0; i-- { // newest first
+		if f.reports[i].UserID == userID {
+			cp := *f.reports[i]
+			cp.Timeline = nil
+			mine = append(mine, &cp)
+		}
+	}
+	total := len(mine)
+	if offset >= total {
+		return []*Report{}, total, nil
+	}
+	return mine[offset:min(offset+limit, total)], total, nil
+}
+
+func (f *fakeRepository) FindForUser(_ context.Context, id, userID int64) (*Report, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, r := range f.reports {
+		if r.ID == id && r.UserID == userID {
+			cp := *r
+			return &cp, nil
+		}
+	}
+	return nil, ErrNotFound
 }
 
 type fakeStore struct {

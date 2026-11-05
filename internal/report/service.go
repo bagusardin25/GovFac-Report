@@ -63,3 +63,31 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Report, error) {
 	rep.PhotoURL = s.photos.URL(key)
 	return rep, nil
 }
+
+func (s *Service) ListMine(ctx context.Context, userID int64, page, perPage int) (*Page, error) {
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 {
+		perPage = defaultPerPage
+	}
+	perPage = min(perPage, maxPerPage)
+
+	reports, total, err := s.repo.ListByUser(ctx, userID, perPage, (page-1)*perPage)
+	if err != nil {
+		return nil, err
+	}
+	for _, rep := range reports {
+		rep.PhotoURL = s.photos.URL(rep.PhotoKey)
+	}
+	return &Page{Reports: reports, Page: page, PerPage: perPage, Total: total}, nil
+}
+
+func (s *Service) GetMine(ctx context.Context, userID, id int64) (*Report, error) {
+	rep, err := s.repo.FindForUser(ctx, id, userID)
+	if err != nil {
+		return nil, err
+	}
+	rep.PhotoURL = s.photos.URL(rep.PhotoKey)
+	return rep, nil
+}

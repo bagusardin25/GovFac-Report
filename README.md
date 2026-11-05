@@ -45,6 +45,8 @@ sedang login, ambil dari `platform/identity`.
 | POST | `/api/v1/auth/password/reset` | – | `{token, password}` → `200`; semua sesi user tersebut ikut logout |
 | POST | `/api/v1/reports` | Bearer | `multipart/form-data`: `title`, `description`, `photo`, `hashtags` → `201 {report}` |
 | GET | `/uploads/{key}` | – | file foto laporan (`photo_url` di response) |
+| GET | `/api/v1/reports/mine` | Bearer | `?page=&per_page=` (default 20, maks 50) → `200 {reports, page, per_page, total}` |
+| GET | `/api/v1/reports/{id}` | Bearer | laporan milik sendiri + `timeline` status → `200 {report}`, selain itu `404` |
 
 Untuk laporan: foto wajib 1 file JPG/PNG/WebP maksimal 5 MB (jenisnya dicek dari isi file), tagar 1–5
 (`#jalanrusak #lampujalan` atau dipisah koma, `#` boleh tidak ditulis). Status awal laporan `admin_review`.
