@@ -14,6 +14,7 @@ type Config struct {
 	DatabaseURL      string
 	SessionTTL       time.Duration
 	PasswordResetURL string
+	UploadDir        string
 	SMTP             SMTP
 }
 
@@ -34,6 +35,7 @@ func Load() (Config, error) {
 		Addr:             getenv("APP_ADDR", ":8080"),
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
 		PasswordResetURL: getenv("PASSWORD_RESET_URL", "http://localhost:3000/reset-password"),
+		UploadDir:        getenv("UPLOAD_DIR", "uploads"),
 		SMTP: SMTP{
 			Host:     os.Getenv("SMTP_HOST"),
 			Username: os.Getenv("SMTP_USERNAME"),
