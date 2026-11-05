@@ -3,6 +3,7 @@ package report
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
@@ -23,10 +24,22 @@ func fakeAuth(next http.Handler) http.Handler {
 
 func newTestServer(t *testing.T) http.Handler {
 	t.Helper()
+	srv, _ := newTestServerWithService(t)
+	return srv
+}
+
+func newTestServerWithService(t *testing.T) (http.Handler, *Service) {
+	t.Helper()
 	svc, _, _ := newTestService()
 	mux := http.NewServeMux()
 	NewHandler(svc, slog.New(slog.DiscardHandler)).RegisterRoutes(mux, fakeAuth)
-	return mux
+	return mux, svc
+}
+
+func get(srv http.Handler, path string) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	return rec
 }
 
 func multipartBody(t *testing.T, fields map[string][]string, photo []byte) (*bytes.Buffer, string) {
@@ -83,6 +96,56 @@ func TestCreateEndpoint(t *testing.T) {
 	}
 	if len(r.Hashtags) != 2 || r.Hashtags[0] != "lampujalan" {
 		t.Errorf("hashtags = %v", r.Hashtags)
+	}
+}
+
+func TestListMineEndpoint(t *testing.T) {
+	srv, svc := newTestServerWithService(t)
+	createFor(t, svc, 7, "satu")
+	createFor(t, svc, 7, "dua")
+	createFor(t, svc, 8, "bukan punya saya")
+
+	rec := get(srv, "/api/v1/reports/mine?per_page=1")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var got pageResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Total != 2 || got.PerPage != 1 || len(got.Reports) != 1 || got.Reports[0].Title != "dua" {
+		t.Errorf("unexpected page: %+v", got)
+	}
+	if got.Reports[0].Timeline != nil {
+		t.Error("list items shouldn't carry the timeline")
+	}
+
+	if rec := get(srv, "/api/v1/reports/mine?page=abc"); rec.Code != http.StatusOK {
+		t.Errorf("bad page param: status = %d, want 200 with defaults", rec.Code)
+	}
+}
+
+func TestGetMineEndpoint(t *testing.T) {
+	srv, svc := newTestServerWithService(t)
+	mine := createFor(t, svc, 7, "punya saya")
+	theirs := createFor(t, svc, 8, "punya orang lain")
+
+	rec := get(srv, fmt.Sprintf("/api/v1/reports/%d", mine.ID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("own report: status = %d", rec.Code)
+	}
+	var got struct{ Report reportResponse }
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Report.Timeline) != 1 || got.Report.Timeline[0].Status != StatusAdminReview {
+		t.Errorf("timeline = %+v", got.Report.Timeline)
+	}
+
+	for _, path := range []string{fmt.Sprintf("/api/v1/reports/%d", theirs.ID), "/api/v1/reports/9999", "/api/v1/reports/abc"} {
+		if rec := get(srv, path); rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", path, rec.Code)
+		}
 	}
 }
 

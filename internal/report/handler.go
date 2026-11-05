@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/bagusardin25/GovFac-Report/internal/platform/httpx"
@@ -23,13 +24,28 @@ func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 }
 
 type reportResponse struct {
-	ID          int64     `json:"id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	PhotoURL    string    `json:"photo_url"`
-	Hashtags    []string  `json:"hashtags"`
-	Status      string    `json:"status"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          int64            `json:"id"`
+	Title       string           `json:"title"`
+	Description string           `json:"description"`
+	PhotoURL    string           `json:"photo_url"`
+	Hashtags    []string         `json:"hashtags"`
+	Status      string           `json:"status"`
+	CreatedAt   time.Time        `json:"created_at"`
+	UpdatedAt   time.Time        `json:"updated_at"`
+	Timeline    []statusResponse `json:"timeline,omitempty"`
+}
+
+type statusResponse struct {
+	Status string    `json:"status"`
+	Note   string    `json:"note"`
+	At     time.Time `json:"at"`
+}
+
+type pageResponse struct {
+	Reports []reportResponse `json:"reports"`
+	Page    int              `json:"page"`
+	PerPage int              `json:"per_page"`
+	Total   int              `json:"total"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -75,8 +91,44 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) listMine(w http.ResponseWriter, r *http.Request) {
+	// Bad or missing values fall back to the defaults in the service.
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+
+	p, err := h.svc.ListMine(r.Context(), identity.FromContext(r.Context()).ID, page, perPage)
+	if err != nil {
+		httpx.ServerError(w, r, h.logger, err)
+		return
+	}
+
+	resp := pageResponse{Reports: make([]reportResponse, 0, len(p.Reports)), Page: p.Page, PerPage: p.PerPage, Total: p.Total}
+	for _, rep := range p.Reports {
+		resp.Reports = append(resp.Reports, toResponse(rep))
+	}
+	httpx.JSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) getMine(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "Laporan tidak ditemukan.")
+		return
+	}
+
+	rep, err := h.svc.GetMine(r.Context(), identity.FromContext(r.Context()).ID, id)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpx.Error(w, http.StatusNotFound, "Laporan tidak ditemukan.")
+	case err != nil:
+		httpx.ServerError(w, r, h.logger, err)
+	default:
+		httpx.JSON(w, http.StatusOK, map[string]any{"report": toResponse(rep)})
+	}
+}
+
 func toResponse(r *Report) reportResponse {
-	return reportResponse{
+	resp := reportResponse{
 		ID:          r.ID,
 		Title:       r.Title,
 		Description: r.Description,
@@ -84,5 +136,13 @@ func toResponse(r *Report) reportResponse {
 		Hashtags:    r.Hashtags,
 		Status:      r.Status,
 		CreatedAt:   r.CreatedAt,
+		UpdatedAt:   r.UpdatedAt,
 	}
+	if resp.Hashtags == nil {
+		resp.Hashtags = []string{}
+	}
+	for _, c := range r.Timeline {
+		resp.Timeline = append(resp.Timeline, statusResponse{Status: c.Status, Note: c.Note, At: c.At})
+	}
+	return resp
 }

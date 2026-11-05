@@ -1,6 +1,7 @@
 package report
 
 import (
+	"errors"
 	"io"
 	"regexp"
 	"strings"
@@ -25,7 +26,29 @@ type Report struct {
 	Hashtags    []string
 	Status      string
 	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Timeline    []StatusChange
 }
+
+type StatusChange struct {
+	Status string
+	Note   string
+	At     time.Time
+}
+
+type Page struct {
+	Reports []*Report
+	Page    int
+	PerPage int
+	Total   int
+}
+
+var ErrNotFound = errors.New("report: not found")
+
+const (
+	defaultPerPage = 20
+	maxPerPage     = 50
+)
 
 type CreateInput struct {
 	UserID      int64
