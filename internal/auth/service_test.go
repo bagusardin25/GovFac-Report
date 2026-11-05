@@ -17,14 +17,41 @@ func newTestService() (*Service, *fakeRepository) {
 }
 
 func newTestServiceWithMailer() (*Service, *fakeRepository, *fakeMailer) {
+	svc, repo, mail, _ := newTestServiceWithFakes()
+	return svc, repo, mail
+}
+
+func newTestServiceWithFakes() (*Service, *fakeRepository, *fakeMailer, *fakeNotifier) {
 	repo := newFakeRepository()
 	mail := newFakeMailer()
-	svc := NewService(repo, mail, Options{
+	notifier := &fakeNotifier{}
+	svc := NewService(repo, mail, notifier, Options{
 		SessionTTL:       time.Hour,
 		PasswordResetURL: "https://app.example/reset-password",
 	})
 	svc.bcryptCost = bcrypt.MinCost
-	return svc, repo, mail
+	return svc, repo, mail, notifier
+}
+
+func TestLogin_NotifiesOnlyOnSuccess(t *testing.T) {
+	svc, _, _, notifier := newTestServiceWithFakes()
+	u := mustRegister(t, svc)
+
+	svc.Login(context.Background(), LoginInput{Email: "budi@example.com", Password: "salah12345"})
+	if len(notifier.events) != 0 {
+		t.Fatalf("failed login produced %d notifications", len(notifier.events))
+	}
+
+	_, err := svc.Login(context.Background(), LoginInput{
+		Email: "budi@example.com", Password: "rahasia123", IPAddress: "10.0.0.5", UserAgent: "Mozilla/5.0 Chrome/130",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := loginEvent{userID: u.ID, ip: "10.0.0.5", userAgent: "Mozilla/5.0 Chrome/130"}
+	if len(notifier.events) != 1 || notifier.events[0] != want {
+		t.Errorf("events = %+v, want [%+v]", notifier.events, want)
+	}
 }
 
 var tokenInLink = regexp.MustCompile(`https://app\.example/reset-password\?token=([A-Za-z0-9_-]+)`)

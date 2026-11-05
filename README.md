@@ -47,6 +47,10 @@ sedang login, ambil dari `platform/identity`.
 | GET | `/uploads/{key}` | – | file foto laporan (`photo_url` di response) |
 | GET | `/api/v1/reports/mine` | Bearer | `?page=&per_page=` (default 20, maks 50) → `200 {reports, page, per_page, total}` |
 | GET | `/api/v1/reports/{id}` | Bearer | laporan milik sendiri + `timeline` status → `200 {report}`, selain itu `404` |
+| GET | `/api/v1/notifications` | Bearer | `?page=&per_page=` → `200 {notifications, page, per_page, total}` |
+
+Setiap login yang berhasil membuat notifikasi `type: "login"` berisi perangkat (dibaca dari User-Agent,
+misalnya "Chrome di Windows") dan IP, supaya user bisa memastikan login itu memang dirinya.
 
 Untuk laporan: foto wajib 1 file JPG/PNG/WebP maksimal 5 MB (jenisnya dicek dari isi file), tagar 1–5
 (`#jalanrusak #lampujalan` atau dipisah koma, `#` boleh tidak ditulis). Status awal laporan `admin_review`.

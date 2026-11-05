@@ -56,6 +56,22 @@ func (f *fakeRepository) ResetPassword(_ context.Context, tokenHash, passwordHas
 	return nil
 }
 
+type loginEvent struct {
+	userID        int64
+	ip, userAgent string
+}
+
+type fakeNotifier struct {
+	mu     sync.Mutex
+	events []loginEvent
+}
+
+func (n *fakeNotifier) LoginSucceeded(_ context.Context, userID int64, ip, userAgent string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.events = append(n.events, loginEvent{userID: userID, ip: ip, userAgent: userAgent})
+}
+
 type sentMail struct {
 	to, subject, body string
 }
