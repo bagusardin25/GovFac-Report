@@ -41,8 +41,13 @@ sedang login, ambil dari `platform/identity`.
 | POST | `/api/v1/auth/login` | – | `{email, password}` → `200 {token, token_type, expires_at, user}` |
 | POST | `/api/v1/auth/logout` | Bearer | `204` |
 | GET | `/api/v1/auth/me` | Bearer | `200 {user}` |
+| POST | `/api/v1/auth/password/forgot` | – | `{email}` → `202`, selalu sama walau email tidak terdaftar |
+| POST | `/api/v1/auth/password/reset` | – | `{token, password}` → `200`; semua sesi user tersebut ikut logout |
 
 Error selalu berbentuk `{"error": "...", "fields": {...}}`. `fields` hanya ada untuk error validasi (422).
+
+Link reset dikirim ke `PASSWORD_RESET_URL?token=...` dan berlaku 30 menit. Kalau `SMTP_HOST` kosong,
+email tidak dikirim tetapi dicetak ke log server, jadi alur reset tetap bisa dites di lokal.
 
 ## Git
 
