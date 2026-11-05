@@ -51,7 +51,7 @@ func run(logger *slog.Logger) error {
 		Addr:              cfg.Addr,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
+		ReadTimeout:       60 * time.Second, // room for a 5 MB photo on a slow mobile connection
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),

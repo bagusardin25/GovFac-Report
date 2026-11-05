@@ -43,6 +43,11 @@ sedang login, ambil dari `platform/identity`.
 | GET | `/api/v1/auth/me` | Bearer | `200 {user}` |
 | POST | `/api/v1/auth/password/forgot` | – | `{email}` → `202`, selalu sama walau email tidak terdaftar |
 | POST | `/api/v1/auth/password/reset` | – | `{token, password}` → `200`; semua sesi user tersebut ikut logout |
+| POST | `/api/v1/reports` | Bearer | `multipart/form-data`: `title`, `description`, `photo`, `hashtags` → `201 {report}` |
+| GET | `/uploads/{key}` | – | file foto laporan (`photo_url` di response) |
+
+Untuk laporan: foto wajib 1 file JPG/PNG/WebP maksimal 5 MB (jenisnya dicek dari isi file), tagar 1–5
+(`#jalanrusak #lampujalan` atau dipisah koma, `#` boleh tidak ditulis). Status awal laporan `admin_review`.
 
 Error selalu berbentuk `{"error": "...", "fields": {...}}`. `fields` hanya ada untuk error validasi (422).
 
