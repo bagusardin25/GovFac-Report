@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/bagusardin25/GovFac-Report/internal/auth"
+	"github.com/bagusardin25/GovFac-Report/internal/notification"
 	"github.com/bagusardin25/GovFac-Report/internal/platform/config"
 	"github.com/bagusardin25/GovFac-Report/internal/platform/mailer"
 	"github.com/bagusardin25/GovFac-Report/internal/platform/middleware"
@@ -26,8 +27,12 @@ func newRouter(cfg config.Config, db *sql.DB, logger *slog.Logger) (http.Handler
 		return nil, err
 	}
 
+	notificationRepo := notification.NewPostgresRepository(db)
+	notificationService := notification.NewService(notificationRepo, logger)
+	notificationHandler := notification.NewHandler(notificationService, logger)
+
 	authRepo := auth.NewPostgresRepository(db)
-	authService := auth.NewService(authRepo, mail, auth.Options{
+	authService := auth.NewService(authRepo, mail, notificationService, auth.Options{
 		SessionTTL:       cfg.SessionTTL,
 		PasswordResetURL: cfg.PasswordResetURL,
 	})
@@ -40,6 +45,7 @@ func newRouter(cfg config.Config, db *sql.DB, logger *slog.Logger) (http.Handler
 	mux := http.NewServeMux()
 	authHandler.RegisterRoutes(mux)
 	reportHandler.RegisterRoutes(mux, authHandler.RequireAuth)
+	notificationHandler.RegisterRoutes(mux, authHandler.RequireAuth)
 	mux.Handle("GET "+uploadsPath, http.StripPrefix(uploadsPath, uploads.Handler()))
 
 	return middleware.Chain(mux,

@@ -22,6 +22,12 @@ type Mailer interface {
 	Send(ctx context.Context, to, subject, body string) error
 }
 
+// We declare what we need here instead of importing the notification
+// feature; the router plugs the two together.
+type LoginNotifier interface {
+	LoginSucceeded(ctx context.Context, userID int64, ip, userAgent string)
+}
+
 type Options struct {
 	SessionTTL time.Duration
 	// Frontend page that reads ?token= and calls POST /password/reset.
@@ -31,16 +37,18 @@ type Options struct {
 type Service struct {
 	repo       Repository
 	mailer     Mailer
+	notifier   LoginNotifier
 	opts       Options
 	bcryptCost int
 	now        func() time.Time
 }
 
-func NewService(repo Repository, mailer Mailer, opts Options) *Service {
+func NewService(repo Repository, mailer Mailer, notifier LoginNotifier, opts Options) *Service {
 	dummyHash() // warm it up so the first unknown-email login isn't slower than the rest
 	return &Service{
 		repo:       repo,
 		mailer:     mailer,
+		notifier:   notifier,
 		opts:       opts,
 		bcryptCost: bcrypt.DefaultCost,
 		now:        time.Now,
@@ -104,6 +112,8 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 	if err != nil {
 		return nil, err
 	}
+
+	s.notifier.LoginSucceeded(ctx, u.ID, truncate(in.IPAddress, 64), truncate(in.UserAgent, 512))
 	return &LoginResult{Token: token, ExpiresAt: expiresAt, User: u}, nil
 }
 
