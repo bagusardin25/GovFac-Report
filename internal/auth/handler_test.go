@@ -12,10 +12,16 @@ import (
 
 func newTestServer(t *testing.T) http.Handler {
 	t.Helper()
-	svc, _ := newTestService()
+	srv, _ := newTestServerWithMailer(t)
+	return srv
+}
+
+func newTestServerWithMailer(t *testing.T) (http.Handler, *fakeMailer) {
+	t.Helper()
+	svc, _, mail := newTestServiceWithMailer()
 	mux := http.NewServeMux()
 	NewHandler(svc, slog.New(slog.DiscardHandler)).RegisterRoutes(mux)
-	return mux
+	return mux, mail
 }
 
 func call(t *testing.T, srv http.Handler, method, path string, body any, token string) *httptest.ResponseRecorder {
@@ -126,6 +132,39 @@ func TestLoginMeLogout(t *testing.T) {
 	}
 	if again := call(t, srv, http.MethodGet, "/api/v1/auth/me", nil, login.Token); again.Code != http.StatusUnauthorized {
 		t.Errorf("me after logout: status = %d, want 401", again.Code)
+	}
+}
+
+func TestForgotAndResetPasswordEndpoints(t *testing.T) {
+	srv, mail := newTestServerWithMailer(t)
+	call(t, srv, http.MethodPost, "/api/v1/auth/register", siti, "")
+
+	unknown := call(t, srv, http.MethodPost, "/api/v1/auth/password/forgot", forgotPasswordRequest{Email: "siapa@example.com"}, "")
+	known := call(t, srv, http.MethodPost, "/api/v1/auth/password/forgot", forgotPasswordRequest{Email: siti.Email}, "")
+	if unknown.Code != http.StatusAccepted || known.Code != http.StatusAccepted {
+		t.Fatalf("forgot: status unknown=%d known=%d, want 202 for both", unknown.Code, known.Code)
+	}
+	if unknown.Body.String() != known.Body.String() {
+		t.Error("forgot must answer identically for registered and unknown emails")
+	}
+	token := tokenFromMail(t, waitForMail(t, mail))
+
+	if rec := call(t, srv, http.MethodPost, "/api/v1/auth/password/forgot", forgotPasswordRequest{Email: "bukan-email"}, ""); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("forgot with bad email: status = %d, want 422", rec.Code)
+	}
+
+	if rec := call(t, srv, http.MethodPost, "/api/v1/auth/password/reset", resetPasswordRequest{Token: "made-up", Password: "passwordbaru1"}, ""); rec.Code != http.StatusBadRequest {
+		t.Errorf("reset with bad token: status = %d, want 400", rec.Code)
+	}
+	if rec := call(t, srv, http.MethodPost, "/api/v1/auth/password/reset", resetPasswordRequest{Token: token, Password: "123"}, ""); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("reset with weak password: status = %d, want 422", rec.Code)
+	}
+	if rec := call(t, srv, http.MethodPost, "/api/v1/auth/password/reset", resetPasswordRequest{Token: token, Password: "passwordbaru1"}, ""); rec.Code != http.StatusOK {
+		t.Fatalf("reset: status = %d, body = %s", rec.Code, rec.Body)
+	}
+
+	if rec := call(t, srv, http.MethodPost, "/api/v1/auth/login", loginRequest{Email: siti.Email, Password: "passwordbaru1"}, ""); rec.Code != http.StatusOK {
+		t.Errorf("login with new password: status = %d, want 200", rec.Code)
 	}
 }
 

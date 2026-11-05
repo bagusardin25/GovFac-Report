@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net"
@@ -28,6 +29,15 @@ type registerRequest struct {
 
 type loginRequest struct {
 	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type forgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+type resetPasswordRequest struct {
+	Token    string `json:"token"`
 	Password string `json:"password"`
 }
 
@@ -109,6 +119,53 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{"user": userResponse{
 		ID: u.ID, Name: u.Name, Email: u.Email, Role: u.Role,
 	}})
+}
+
+func (h *Handler) forgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req forgotPasswordRequest
+	if !httpx.Decode(w, r, &req) {
+		return
+	}
+	if msg := validateEmail(req.Email); msg != "" {
+		httpx.ValidationError(w, map[string]string{"email": msg})
+		return
+	}
+
+	// We look the user up and send the email in the background, so the
+	// response and its timing are the same whether or not the email exists.
+	go func(ctx context.Context) {
+		ctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		if err := h.svc.RequestPasswordReset(ctx, req.Email); err != nil {
+			h.logger.Error("password reset request", "error", err)
+		}
+	}(context.WithoutCancel(r.Context()))
+
+	httpx.JSON(w, http.StatusAccepted, map[string]string{
+		"message": "Jika email terdaftar, tautan untuk mengatur ulang password sudah dikirim.",
+	})
+}
+
+func (h *Handler) resetPassword(w http.ResponseWriter, r *http.Request) {
+	var req resetPasswordRequest
+	if !httpx.Decode(w, r, &req) {
+		return
+	}
+
+	err := h.svc.ResetPassword(r.Context(), req.Token, req.Password)
+	var invalid ValidationError
+	switch {
+	case errors.As(err, &invalid):
+		httpx.ValidationError(w, invalid)
+	case errors.Is(err, ErrResetTokenInvalid):
+		httpx.Error(w, http.StatusBadRequest, "Tautan reset password tidak valid atau sudah kedaluwarsa.")
+	case err != nil:
+		httpx.ServerError(w, r, h.logger, err)
+	default:
+		httpx.JSON(w, http.StatusOK, map[string]string{
+			"message": "Password berhasil diubah. Silakan login dengan password baru.",
+		})
+	}
 }
 
 func toUserResponse(u *User) userResponse {

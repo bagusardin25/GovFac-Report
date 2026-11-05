@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -11,10 +12,41 @@ import (
 )
 
 func newTestService() (*Service, *fakeRepository) {
-	repo := newFakeRepository()
-	svc := NewService(repo, time.Hour)
-	svc.bcryptCost = bcrypt.MinCost
+	svc, repo, _ := newTestServiceWithMailer()
 	return svc, repo
+}
+
+func newTestServiceWithMailer() (*Service, *fakeRepository, *fakeMailer) {
+	repo := newFakeRepository()
+	mail := newFakeMailer()
+	svc := NewService(repo, mail, Options{
+		SessionTTL:       time.Hour,
+		PasswordResetURL: "https://app.example/reset-password",
+	})
+	svc.bcryptCost = bcrypt.MinCost
+	return svc, repo, mail
+}
+
+var tokenInLink = regexp.MustCompile(`https://app\.example/reset-password\?token=([A-Za-z0-9_-]+)`)
+
+func tokenFromMail(t *testing.T, m sentMail) string {
+	t.Helper()
+	match := tokenInLink.FindStringSubmatch(m.body)
+	if match == nil {
+		t.Fatalf("no reset link in email body:\n%s", m.body)
+	}
+	return match[1]
+}
+
+func waitForMail(t *testing.T, mail *fakeMailer) sentMail {
+	t.Helper()
+	select {
+	case m := <-mail.sent:
+		return m
+	case <-time.After(2 * time.Second):
+		t.Fatal("no email was sent")
+		return sentMail{}
+	}
 }
 
 func validRegisterInput() RegisterInput {

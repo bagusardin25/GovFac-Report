@@ -31,6 +31,12 @@ type Session struct {
 	ExpiresAt time.Time
 }
 
+type PasswordReset struct {
+	UserID    int64
+	TokenHash string
+	ExpiresAt time.Time
+}
+
 type RegisterInput struct {
 	Name     string
 	Email    string
@@ -55,6 +61,7 @@ var (
 	ErrInvalidCredentials = errors.New("auth: invalid email or password")
 	ErrUserNotFound       = errors.New("auth: user not found")
 	ErrSessionNotFound    = errors.New("auth: session not found or expired")
+	ErrResetTokenInvalid  = errors.New("auth: reset token invalid, used or expired")
 )
 
 // ValidationError maps a field to a message the client can show as-is.
@@ -88,17 +95,24 @@ func (in RegisterInput) validate() ValidationError {
 		errs["email"] = msg
 	}
 
-	switch {
-	case utf8.RuneCountInString(in.Password) < minPasswordChars:
-		errs["password"] = "Password minimal 8 karakter."
-	case len(in.Password) > maxPasswordBytes:
-		errs["password"] = "Password maksimal 72 karakter."
+	if msg := validatePassword(in.Password); msg != "" {
+		errs["password"] = msg
 	}
 
 	if len(errs) == 0 {
 		return nil
 	}
 	return errs
+}
+
+func validatePassword(password string) string {
+	switch {
+	case utf8.RuneCountInString(password) < minPasswordChars:
+		return "Password minimal 8 karakter."
+	case len(password) > maxPasswordBytes:
+		return "Password maksimal 72 karakter."
+	}
+	return ""
 }
 
 func validateEmail(raw string) string {

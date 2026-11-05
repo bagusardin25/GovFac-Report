@@ -42,9 +42,14 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
+	handler, err := newRouter(cfg, db, logger)
+	if err != nil {
+		return err
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           newRouter(cfg, db, logger),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
